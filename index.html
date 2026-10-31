@@ -30,9 +30,13 @@
 [hidden]{display:none !important}
 html,body{height:100%;margin:0;background:var(--umber);color:var(--cream);font-family:var(--body);overflow:hidden;
   touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
-#stage{position:fixed;inset:0;display:grid;place-items:center;
-  background:radial-gradient(ellipse at 50% 120%,#4a2c17 0%,var(--umber) 70%)}
-#cv{display:block;touch-action:none;border-radius:4px}
+#stage{position:fixed;inset:0;background:var(--umber)}
+#cv{display:block;touch-action:none;position:absolute;left:0;top:0}
+#rotate{position:fixed;inset:0;z-index:50;background:var(--umber);display:grid;place-items:center;padding:24px;text-align:center}
+#rotate .rot{display:flex;flex-direction:column;align-items:center;gap:12px;max-width:340px}
+#rotate h2{margin:0;font-family:var(--display);font-weight:400;font-size:28px;color:var(--cream)}
+#rotate p{margin:0;color:var(--muted);font-size:15px;line-height:1.45}
+#rotate .opt{width:100%;text-align:center;align-items:center}
 
 #hud{position:fixed;top:8px;left:8px;right:8px;display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:start;pointer-events:none}
 .team{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 10px;min-width:0;max-width:220px}
@@ -112,8 +116,6 @@ html,body{height:100%;margin:0;background:var(--umber);color:var(--cream);font-f
 .warn{color:#f3a37f}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#7d6d5a;margin-right:6px;vertical-align:middle}
 .dot.ok{background:#7fd17a}
-.hint{display:none}
-body.portrait .hint{display:block}
 @media (max-height:430px){
   .btn{height:44px;min-width:44px}
   #fire{width:58px;height:58px;font-size:19px}
@@ -152,6 +154,17 @@ body.portrait .hint{display:block}
     <div id="stam" aria-hidden="true"><i id="stamFill"></i></div>
   </div>
   <button class="btn" id="bMenu" aria-label="Pause menu">&#9776;</button>
+  <button class="btn" id="bZoom" aria-label="Show the whole battlefield"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M7.5 10.5h6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path id="zPlus" d="M10.5 7.5v6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" hidden/></svg></button>
+</div>
+
+<div id="rotate" hidden>
+  <div class="rot">
+    <svg viewBox="0 0 64 64" width="72" height="72" aria-hidden="true"><rect x="20" y="8" width="24" height="40" rx="4" fill="none" stroke="#ffb627" stroke-width="3"/><path d="M50 40a18 18 0 0 1-18 18" fill="none" stroke="#cdb698" stroke-width="3" stroke-linecap="round"/><path d="M33 53l-3 5 5 3" fill="none" stroke="#cdb698" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <h2>Turn your phone sideways</h2>
+    <p>Dust Devils plays in landscape.</p>
+    <button class="opt primary" id="rotBtn" hidden>Switch to landscape<small>Goes full screen and locks it sideways</small></button>
+    <p class="note" id="rotNote"></p>
+  </div>
 </div>
 
 <div id="right" class="ctrl">
@@ -175,8 +188,7 @@ body.portrait .hint{display:block}
       <button class="opt" id="goRejoin" hidden>Rejoin game<small id="rejoinSub"></small></button>
     </div>
     <div class="how">
-      <p><b style="color:var(--cream)">How to play:</b> drag across the battlefield to aim. A longer drag means a harder shot. Then tap Fire. Wind pushes rockets and airstrikes, but not grenades. Grenades bounce and go off after 3 seconds. Anyone who falls in the quicksand is out.</p>
-      <p class="hint" style="margin-top:6px">Tip: turn your phone sideways for a bigger battlefield.</p>
+      <p><b style="color:var(--cream)">How to play:</b> drag across the battlefield to aim. A longer drag means a harder shot. Then tap Fire. Pinch to zoom, and tap the magnifier to see the whole map. Wind pushes rockets and airstrikes, but not grenades. Grenades bounce and go off after 3 seconds. Anyone who falls in the quicksand is out.</p>
     </div>
   </div>
 
@@ -530,11 +542,12 @@ function explode(x,y,r,dmg){
     const kn=420*f; m.vx+=nx*kn; m.vy+=ny*kn-140*f; m.grounded=false; m.peakY=m.y;
   }
   boomFx(x,y,r);
+  focus={x,y,t:time+0.9};
 }
 function launch(P){
   const m=st.moles[st.active];
   m.x=P.x; m.y=P.y; m.facing=P.f>0?1:-1; m.vx=0; m.vy=0; m.grounded=supported(m); m.peakY=m.y;
-  frozenId=-1;
+  frozenId=-1; cam.manual=false;
   if(P.w==="cluster"||P.w==="air") st.ammo[st.turnTeam][P.w]=Math.max(0,st.ammo[st.turnTeam][P.w]-1);
   if(P.w==="air"){
     for(let i=0;i<5;i++) projs.push(mkProj("missile",P.tx+(i-2)*30,-30-i*22,0,240,-1,0));
@@ -564,7 +577,7 @@ function jump(){
 
 /* ================= turns ================= */
 function startTurn(){
-  projs.length=0; pending=null; settleT=0; target=null; walkDir=0; drag=null; cpuJob=null; cpuPlan=null;
+  projs.length=0; pending=null; settleT=0; target=null; walkDir=0; drag=null; cpuJob=null; cpuPlan=null; cam.manual=false; focus.t=-1;
   lastEnc=encodeState(st); persistOnline();
   if(st.winner!==-2){phase="over";showOver();sendState(true);return;}
   phase="aim"; stamina=STAMINA;
@@ -708,19 +721,50 @@ function stepParts(){
 }
 
 /* ================= rendering ================= */
-let scaleCss=1, dpr=1;
+const coarse=matchMedia("(pointer: coarse)").matches;
+let vw=1, vh=1, dpr=1, baseS=1, closeS=1;
+/* camera: follows the active fox and anything in flight; pinch to zoom, drag to look around, button for the full map */
+const cam={x:W/2,y:H/2,s:0.6,userS:1,manual:false,full:false};
+let focus={x:0,y:0,t:-1};
 function layout(){
-  const vw=innerWidth, vh=innerHeight;
-  scaleCss=Math.min(vw/W,vh/H); dpr=Math.min(2,devicePixelRatio||1);
-  cv.style.width=W*scaleCss+"px"; cv.style.height=H*scaleCss+"px";
-  cv.width=Math.round(W*scaleCss*dpr); cv.height=Math.round(H*scaleCss*dpr);
+  vw=innerWidth; vh=innerHeight; dpr=Math.min(2,devicePixelRatio||1);
+  cv.style.width=vw+"px"; cv.style.height=vh+"px";
+  cv.width=Math.round(vw*dpr); cv.height=Math.round(vh*dpr);
+  baseS=Math.min(vw/W,vh/H);
+  closeS=clamp(Math.min(vw/560,vh/290),baseS,baseS*(coarse?2.6:1.5));
+  if(cam.s<baseS*0.5) cam.s=baseS;
   document.body.classList.toggle("portrait",vh>vw);
+  $("rotate").hidden=!(coarse&&vh>vw);
+  clampCam();
+}
+function clampCam(){
+  const hw=vw/2/cam.s, hh=vh/2/cam.s, top=-60, bot=H;
+  cam.x=W<=2*hw?W/2:clamp(cam.x,hw,W-hw);
+  cam.y=(bot-top)<=2*hh?(top+bot)/2:clamp(cam.y,top+hh,bot-hh);
+}
+function updateCamera(dt){
+  let ts=closeS, tx=cam.x, ty=cam.y, fast=false;
+  const wantFull=cam.full||mode==="menu"||phase==="lobby"||(phase==="aim"&&weapon==="air");
+  if(cam.manual) ts=cam.userS;
+  else if(wantFull){ts=baseS;tx=W/2;ty=H/2;}
+  else if(projs.length){
+    let p=projs[0]; for(const q of projs){if(q.kind!=="missile"){p=q;break;}}
+    tx=p.x; ty=Math.max(p.y,-20); fast=true;
+  }
+  else if(focus.t>time){tx=focus.x;ty=focus.y;}
+  else if(st){const m=activeMole();tx=m.x;ty=m.y-30;}
+  const k=1-Math.exp(-dt*(fast?6:3.5));
+  cam.s+=(ts-cam.s)*k;
+  if(!cam.manual){cam.x+=(tx-cam.x)*k;cam.y+=(ty-cam.y)*k;}
+  clampCam();
 }
 function render(){
-  const s=scaleCss*dpr;
   ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle="#24160e"; ctx.fillRect(0,0,cv.width,cv.height);
   let sx=0,sy=0; if(shake>0.2&&!reduceMotion){sx=(Math.random()-0.5)*shake;sy=(Math.random()-0.5)*shake;} shake*=0.86;
-  ctx.setTransform(s,0,0,s,sx*s,sy*s);
+  const S=cam.s*dpr;
+  ctx.setTransform(S,0,0,S,(vw/2-cam.x*cam.s+sx)*dpr,(vh/2-cam.y*cam.s+sy)*dpr);
+  ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high";
+  ctx.fillStyle="#5b9fd4"; ctx.fillRect(0,-200,W,201);
   ctx.drawImage(bgCv,0,0);
   for(const c of wisps){
     ctx.fillStyle="rgba(255,244,222,.38)";
@@ -737,7 +781,7 @@ function render(){
     for(const m of st.moles) if(m.alive&&!m.gone) drawLabel(m);
     if(phase==="aim") drawAim();
   }
-  ctx.textAlign="center"; ctx.font="700 15px 'Atkinson Hyperlegible', system-ui, sans-serif";
+  ctx.textAlign="center"; ctx.font="700 "+Math.max(15,13/cam.s)+"px 'Atkinson Hyperlegible', system-ui, sans-serif";
   for(const f of floaters){ctx.globalAlpha=Math.max(0,1-f.t/1.4);ctx.lineWidth=4;ctx.strokeStyle="#24160e";ctx.strokeText(f.txt,f.x,f.y);ctx.fillStyle=f.col;ctx.fillText(f.txt,f.x,f.y);}
   ctx.globalAlpha=1;
 }
@@ -789,13 +833,14 @@ function drawCritter(m){
 function drawLabel(m){
   const isAct=st.moles[st.active]===m;
   const txt=m.name+" "+m.hp;
-  ctx.font="700 11px 'Atkinson Hyperlegible', system-ui, sans-serif"; ctx.textAlign="center";
-  const w=ctx.measureText(txt).width+10, y=m.y-R-30;
-  ctx.fillStyle="rgba(36,22,14,.84)"; ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(m.x-w/2,y-10,w,15,5); else ctx.rect(m.x-w/2,y-10,w,15); ctx.fill();
-  ctx.fillStyle=TEAMS[m.team].color; ctx.fillText(txt,m.x,y+1);
+  const fs=Math.max(9,10.5/cam.s);
+  ctx.font="700 "+fs+"px 'Atkinson Hyperlegible', system-ui, sans-serif"; ctx.textAlign="center";
+  const w=ctx.measureText(txt).width+fs*0.9, h=fs*1.36, top=m.y-R-15-h;
+  ctx.fillStyle="rgba(36,22,14,.84)"; ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(m.x-w/2,top,w,h,h*0.33); else ctx.rect(m.x-w/2,top,w,h); ctx.fill();
+  ctx.fillStyle=TEAMS[m.team].color; ctx.fillText(txt,m.x,top+h*0.74);
   if(isAct&&phase==="aim"){
-    const b=reduceMotion?0:Math.sin(time*6)*2.5, ay=y-16+b;
-    ctx.fillStyle=TEAMS[m.team].color; ctx.beginPath(); ctx.moveTo(m.x-6,ay-7); ctx.lineTo(m.x+6,ay-7); ctx.lineTo(m.x,ay); ctx.closePath(); ctx.fill();
+    const a=fs*0.55, b=reduceMotion?0:Math.sin(time*6)*a*0.4, ay=top-3+b;
+    ctx.fillStyle=TEAMS[m.team].color; ctx.beginPath(); ctx.moveTo(m.x-a,ay-a*1.15); ctx.lineTo(m.x+a,ay-a*1.15); ctx.lineTo(m.x,ay); ctx.closePath(); ctx.fill();
   }
 }
 function drawProj(p){
@@ -844,7 +889,7 @@ function drawAim(){
   const col=TEAMS[st.turnTeam].color;
   if(weapon==="air"){
     if(target==null){
-      if(canControl()){ctx.font="700 14px 'Atkinson Hyperlegible', system-ui";ctx.textAlign="center";ctx.fillStyle="rgba(36,22,14,.82)";ctx.fillRect(W/2-125,58,250,24);ctx.fillStyle=col;ctx.fillText("Tap where the airstrike should land",W/2,75);}
+      if(canControl()){const fs=Math.max(14,13/cam.s),msg="Tap where the airstrike should land";ctx.font="700 "+fs+"px 'Atkinson Hyperlegible', system-ui";ctx.textAlign="center";const tw=ctx.measureText(msg).width+fs*1.4;ctx.fillStyle="rgba(36,22,14,.85)";ctx.fillRect(W/2-tw/2,H*0.2,tw,fs*1.7);ctx.fillStyle=col;ctx.fillText(msg,W/2,H*0.2+fs*1.2);}
       return;
     }
     ctx.strokeStyle=col; ctx.lineWidth=2; ctx.setLineDash([6,6]); ctx.beginPath(); ctx.moveTo(target,10); ctx.lineTo(target,topY(target)); ctx.stroke(); ctx.setLineDash([]);
@@ -887,6 +932,8 @@ function updateHud(){
   setStyle(f,"left",w<0?(50+w*5)+"%":"50%"); setStyle(f,"width",Math.abs(w)*5+"%"); setText("wv",(w<0?"◀ ":w>0?"▶ ":"")+Math.abs(w));
   const can=canControl();
   if(txtCache.can!==can){txtCache.can=can;$("stamWrap").classList.toggle("off",!can);$("right").classList.toggle("off",!can);}
+  const zoomedOut=cam.full&&!cam.manual;
+  if(txtCache.zo!==zoomedOut){txtCache.zo=zoomedOut;$("zPlus").hidden=!zoomedOut;$("bZoom").setAttribute("aria-label",zoomedOut?"Zoom back in":"Show the whole battlefield");}
   setStyle($("stamFill"),"width",(stamina/STAMINA*100)+"%");
   setText("power",weapon==="air"?(target==null?"Pick a target":"Target set"):"Power "+Math.round(aim.power*100)+"%");
   const am=st.ammo[st.turnTeam];
@@ -935,16 +982,39 @@ function demo(){
 }
 
 /* ================= input ================= */
-function toWorld(e){const r=cv.getBoundingClientRect();return {x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H};}
+function toWorld(e){const r=cv.getBoundingClientRect();return {x:cam.x+(e.clientX-r.left-vw/2)/cam.s,y:cam.y+(e.clientY-r.top-vh/2)/cam.s};}
 function setAim(a,p){aim.angle=a;aim.power=clamp(p,0.08,1);const m=activeMole();m.facing=Math.cos(a)>=0?1:-1;}
+const ptrs=new Map(); let pinch=null, pan=null;
+function pinchInfo(){const [a,b]=[...ptrs.values()],r=cv.getBoundingClientRect();return {mx:(a.x+b.x)/2-r.left,my:(a.y+b.y)/2-r.top,d:Math.hypot(a.x-b.x,a.y-b.y)||1};}
+function startPinch(){
+  const q=pinchInfo();
+  pinch={d:q.d,s:cam.s,wx:cam.x+(q.mx-vw/2)/cam.s,wy:cam.y+(q.my-vh/2)/cam.s};
+  cam.manual=true; cam.userS=cam.s;
+}
+function movePinch(){
+  const q=pinchInfo(), ns=clamp(pinch.s*q.d/pinch.d,baseS,closeS*1.8);
+  cam.s=ns; cam.userS=ns;
+  cam.x=pinch.wx-(q.mx-vw/2)/ns; cam.y=pinch.wy-(q.my-vh/2)/ns; clampCam();
+}
 cv.addEventListener("pointerdown",e=>{
-  if(!canControl()) return;
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  try{cv.setPointerCapture(e.pointerId);}catch(_){}
+  if(!st||mode==="menu") return;
+  if(ptrs.size===2){drag=null;pan=null;startPinch();return;}
+  if(ptrs.size>2) return;
+  if(!canControl()){pan={sx:e.clientX,sy:e.clientY,cx:cam.x,cy:cam.y,moved:false};return;}
   const p=toWorld(e);
   if(weapon==="air"){target=Math.round(clamp(p.x,10,W-10));return;}
   drag={id:e.pointerId,sx:e.clientX,sy:e.clientY,moved:false};
-  try{cv.setPointerCapture(e.pointerId);}catch(_){}
 });
 cv.addEventListener("pointermove",e=>{
+  if(ptrs.has(e.pointerId)) ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch){if(ptrs.size>=2)movePinch();return;}
+  if(pan){
+    const dx=e.clientX-pan.sx, dy=e.clientY-pan.sy;
+    if(!pan.moved&&dx*dx+dy*dy<64) return;
+    pan.moved=true; cam.manual=true; cam.userS=cam.s; cam.x=pan.cx-dx/cam.s; cam.y=pan.cy-dy/cam.s; clampCam(); return;
+  }
   if(!drag||e.pointerId!==drag.id||!canControl()) return;
   const dx=e.clientX-drag.sx, dy=e.clientY-drag.sy, L=Math.sqrt(dx*dx+dy*dy);
   if(L>8){drag.moved=true;setAim(Math.atan2(dy,dx),L/150);}
@@ -954,7 +1024,34 @@ const endDrag=e=>{
   if(!drag.moved&&canControl()){const p=toWorld(e),m=activeMole();setAim(Math.atan2(p.y-m.y,p.x-m.x),aim.power);}
   drag=null;
 };
-cv.addEventListener("pointerup",endDrag); cv.addEventListener("pointercancel",()=>{drag=null;});
+cv.addEventListener("pointerup",e=>{
+  ptrs.delete(e.pointerId);
+  if(pinch){if(ptrs.size<2)pinch=null;drag=null;return;}
+  if(pan){pan=null;return;}
+  endDrag(e);
+});
+cv.addEventListener("pointercancel",e=>{ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;drag=null;pan=null;});
+cv.addEventListener("wheel",e=>{
+  if(!st||mode==="menu") return; e.preventDefault();
+  const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  const wx=cam.x+(mx-vw/2)/cam.s, wy=cam.y+(my-vh/2)/cam.s;
+  const ns=clamp(cam.s*Math.exp(-e.deltaY*0.0015),baseS,closeS*1.8);
+  cam.manual=true; cam.s=ns; cam.userS=ns; cam.x=wx-(mx-vw/2)/ns; cam.y=wy-(my-vh/2)/ns; clampCam();
+},{passive:false});
+function toggleZoom(){
+  if(cam.manual){cam.manual=false;cam.full=false;}
+  else cam.full=!cam.full;
+}
+/* landscape: on Android, go full screen and lock sideways; iPhone can't lock, so a rotate prompt covers portrait */
+function goLandscape(){
+  if(!coarse) return;
+  const el=document.documentElement, req=el.requestFullscreen||el.webkitRequestFullscreen;
+  const lock=()=>{try{if(screen.orientation&&screen.orientation.lock)screen.orientation.lock("landscape").catch(()=>{});}catch(e){}};
+  if(document.fullscreenElement||document.webkitFullscreenElement){lock();return;}
+  if(!req) return;
+  try{const p=req.call(el,{navigationUI:"hide"});if(p&&p.then)p.then(lock).catch(()=>{});else lock();}catch(e){}
+}
+const canLock=!!((document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)&&screen.orientation&&screen.orientation.lock);
 function holdBtn(el,dir){
   el.addEventListener("pointerdown",e=>{e.preventDefault();try{el.setPointerCapture(e.pointerId);}catch(_){}walkDir=dir;el.classList.add("on");});
   const up=()=>{if(walkDir===dir)walkDir=0;el.classList.remove("on");};
@@ -979,9 +1076,14 @@ addEventListener("keydown",e=>{
 });
 addEventListener("keyup",e=>{if((e.key==="ArrowLeft"&&walkDir===-1)||(e.key==="ArrowRight"&&walkDir===1))walkDir=0;});
 addEventListener("resize",layout); addEventListener("orientationchange",()=>setTimeout(layout,200));
+document.addEventListener("fullscreenchange",()=>setTimeout(layout,100));
 
-$("goLocal").addEventListener("click",()=>startLocal("local"));
-$("goCpu").addEventListener("click",()=>startLocal("cpu"));
+$("goLocal").addEventListener("click",()=>{goLandscape();startLocal("local");});
+$("goCpu").addEventListener("click",()=>{goLandscape();startLocal("cpu");});
+$("bZoom").addEventListener("click",toggleZoom);
+$("rotBtn").addEventListener("click",goLandscape);
+$("rotBtn").hidden=!canLock;
+$("rotNote").textContent=canLock?"Or just turn your phone. If it won't rotate, turn off rotation lock.":"If it won't rotate, turn off Portrait Orientation Lock in Control Center.";
 $("goOnline").addEventListener("click",()=>{$("onlineMsg").textContent="";showPanel("pOnline");});
 $("onlineBack").addEventListener("click",()=>showPanel("pMain"));
 $("bMenu").addEventListener("click",()=>{
@@ -994,15 +1096,15 @@ $("restartBtn").addEventListener("click",()=>startLocal(mode));
 $("quitBtn").addEventListener("click",()=>{leaveOnline();demo();showPanel("pMain");refreshRejoin();});
 $("againBtn").addEventListener("click",rematch);
 $("overMenu").addEventListener("click",()=>{leaveOnline();demo();showPanel("pMain");refreshRejoin();});
-$("hostBtn").addEventListener("click",()=>enterOnline(randCode(),"host",false));
+$("hostBtn").addEventListener("click",()=>{goLandscape();enterOnline(randCode(),"host",false);});
 $("joinBtn").addEventListener("click",()=>{
   const c=$("codeIn").value.toUpperCase().replace(/[^A-Z0-9]/g,"");
   if(c.length!==4){$("onlineMsg").textContent="Codes are 4 letters or numbers.";return;}
-  enterOnline(c,"guest",false);
+  goLandscape(); enterOnline(c,"guest",false);
 });
 $("codeIn").addEventListener("keydown",e=>{if(e.key==="Enter")$("joinBtn").click();});
 $("lobbyCancel").addEventListener("click",()=>{leaveOnline(true);demo();showPanel("pMain");refreshRejoin();});
-$("goRejoin").addEventListener("click",()=>{const s=loadSession();if(s)enterOnline(s.code,s.role,true);});
+$("goRejoin").addEventListener("click",()=>{const s=loadSession();if(s){goLandscape();enterOnline(s.code,s.role,true);}});
 
 /* ================= online play: direct phone-to-phone (PeerJS / WebRTC) ================= */
 const NET_PREFIX="dustdevils-v1-";
@@ -1185,7 +1287,7 @@ let lastT=performance.now(), acc=0;
 function frame(t){
   let dt=(t-lastT)/1000; lastT=t; if(dt>0.25)dt=0.25; if(dt<0)dt=0;
   acc+=dt; let n=0; while(acc>=DT&&n<12){tick();acc-=DT;n++;} if(n>=12)acc=0;
-  render(); updateHud();
+  updateCamera(dt); render(); updateHud();
   requestAnimationFrame(frame);
 }
 layout(); demo(); showPanel("pMain"); requestAnimationFrame(frame); detectNet();
